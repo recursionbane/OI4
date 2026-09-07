@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow"><title>OI4 · Decision desk</title>
+<style>html{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#eaf0f5;color:#203449;font-family:ui-sans-serif,system-ui,sans-serif}.unlock{min-height:100svh;display:grid;place-items:center;padding:28px}.unlock-card{width:100%;max-width:430px;background:#fff;border:1px solid #d6e0e9;padding:42px;border-radius:16px;box-shadow:0 18px 70px #17314f12}.brand{color:#2a5eb1;font-size:17px;letter-spacing:5px;font-weight:800}h1{font-family:Georgia,serif;font-size:34px;letter-spacing:-1px;margin:32px 0 16px}p{line-height:1.6;color:#657586;font-size:14px}label{display:block;font-size:13px;font-weight:650;margin:28px 0 8px}input{width:100%;font-size:17px;padding:13px;border:1px solid #afbfce;border-radius:7px;background:#f7f9fb}button{margin-top:16px;width:100%;border:0;background:#295fae;color:white;font-size:14px;font-weight:700;border-radius:7px;padding:15px;cursor:pointer}button:disabled{opacity:.6}input:focus-visible,button:focus-visible{outline:3px solid #79a8ec;outline-offset:3px}#status{min-height:24px;margin-bottom:0;color:#934b32}.foot{border-top:1px solid #e2e7ee;margin-top:26px;padding-top:18px;font-size:12px}</style></head>
+<body><main class="unlock"><section class="unlock-card"><div class="brand">OI4 /</div><h1>Your decision desk.</h1><p>Open your private research, contract comparisons, and position reviews.</p><form id="unlock"><label for="passphrase">Passphrase</label><input id="passphrase" type="password" autocomplete="off" required autofocus><button id="open" type="submit">Unlock dashboard</button><p role="status" id="status"></p></form><p class="foot">Decrypted for this session. Lock or close the page to clear it.</p></section></main>
+<script>
+const decode=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function script(text){const url=URL.createObjectURL(new Blob([text],{type:'text/javascript'}));try{await new Promise((ok,no)=>{const s=document.createElement('script');s.src=url;s.onload=ok;s.onerror=no;document.head.appendChild(s)})}finally{URL.revokeObjectURL(url)}}
+window.addEventListener('oi4-lock',()=>location.reload());
+document.getElementById('unlock').addEventListener('submit',async event=>{
+event.preventDefault();const button=document.getElementById('open'),status=document.getElementById('status'),field=document.getElementById('passphrase');button.disabled=true;status.textContent='Opening your desk…';
+try{
+ const response=await fetch('./bundle.json',{cache:'no-store',credentials:'omit'});if(!response.ok)throw Error('bundle');const e=await response.json();
+ if(e.version!==1||e.iterations!==600000)throw Error('version');
+ const source=await crypto.subtle.importKey('raw',new TextEncoder().encode(field.value),'PBKDF2',false,['deriveKey']);
+ const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:decode(e.salt),iterations:e.iterations,hash:'SHA-256'},source,{name:'AES-GCM',length:256},false,['decrypt']);
+ const raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:decode(e.nonce),additionalData:new TextEncoder().encode('OI4/v1')},key,decode(e.ciphertext));
+ const unpacked=await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+ const payload=JSON.parse(unpacked);field.value='';
+ window.OI4_DATA=payload.snapshot;await script(payload.runtime);const go=new Go();const result=await WebAssembly.instantiate(decode(payload.wasm),go.importObject);go.run(result.instance).catch(()=>{});
+ document.querySelector('head style')?.remove();const style=document.createElement('style');style.textContent=payload.css;document.head.appendChild(style);
+ document.body.replaceChildren();const app=document.createElement('div');app.id='app';document.body.appendChild(app);await script(payload.js);
+}catch(error){if(document.getElementById('status')){status.textContent='Unable to unlock. Check the passphrase and try again.';button.disabled=false;field.focus()}else{document.body.textContent='Unable to open the dashboard. Reload to retry.'}}
+});
+</script></body></html>
